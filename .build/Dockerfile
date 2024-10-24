@@ -1,5 +1,3 @@
-# Dockerfile based on https://github.com/husarion/o3de-docker/blob/main/Dockerfile
-
 ARG ROS_DISTRO=humble
 
 FROM husarnet/ros:${ROS_DISTRO}-ros-core
@@ -149,3 +147,23 @@ RUN pip install --no-cache-dir python-statemachine
 WORKDIR $WORKDIR
 
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
+# Installing ubuntu-desktop x11vnc novnc
+RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install --no-install-recommends -y \
+    openssh-server \
+    supervisor \
+    xfce4 xfce4-goodies \
+    x11vnc xvfb \
+    novnc \
+    dbus-x11 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /root
+
+ADD startup.sh ./
+ADD supervisord.conf ./
+
+EXPOSE 5900
+EXPOSE 22
+
+ENTRYPOINT ["./startup.sh"]
