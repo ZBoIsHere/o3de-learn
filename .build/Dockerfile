@@ -1,16 +1,5 @@
-ARG ROS_DISTRO=humble
-
-FROM husarnet/ros:${ROS_DISTRO}-ros-core
-
-# O3DE 2310.1
-ENV O3DE_HASH=c89678d6ba58271c76650e7aec180a3196f24f02
-
-# ROS2GEM 2310.1
-ENV O3DE_EXTRAS_HASH=f21f48125a24517bd6c29fd95ee97a85d546f675
-ENV PROJECT_NAME=eail
-
-ENV WORKDIR=/data/workspace
-WORKDIR $WORKDIR
+# make sure the host drivers >= cuda11.8 corresponding version
+FROM nvidia/cuda:11.8.0-devel-ubuntu22.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -27,7 +16,7 @@ RUN sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
 
 ENV LANG=en_US.UTF-8
 
-# Install common tools
+# Install common tools and ubuntu graphic desktop and vnc+novnc
 # deps in https://github.com/o3de/o3de/blob/development/scripts/build/build_node/Platform/Linux/package-list.ubuntu-jammy.txt
 RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install --no-install-recommends -y \
     bc \
@@ -36,6 +25,8 @@ RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install --no-inst
     ca-certificates \
     clang \
     cmake \
+    curl \
+    dbus-x11 \
     file \
     firewalld \
     git \
@@ -61,19 +52,42 @@ RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install --no-inst
     lsof \
     net-tools \
     ninja-build \
+    novnc \
+    openssh-server \
     pciutils \
     python3-pip \
     software-properties-common \
     sudo \
+    supervisor \
     tar \
     unzip \
     vim \
     wget \
+    x11vnc xvfb \
+    xfce4 xfce4-goodies \
     xz-utils \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+WORKDIR /root
+
+ADD startup.sh ./
+ADD supervisord.conf ./
+
+EXPOSE 5900
+EXPOSE 22
+
+# ROS2 humble
+RUN add-apt-repository universe \
+    && curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] \
+    http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+
+
+ARG ROS_DISTRO=humble
 # Gem + ROS pacakges
 RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install --no-install-recommends -y \
+    ros-humble-desktop \
+    ros-dev-tools \
     ros-$ROS_DISTRO-ackermann-msgs \
     ros-$ROS_DISTRO-control-toolbox \
     ros-$ROS_DISTRO-gazebo-msgs \
@@ -83,11 +97,23 @@ RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install --no-inst
     ros-$ROS_DISTRO-tf2-ros \
     ros-$ROS_DISTRO-urdfdom \
     ros-$ROS_DISTRO-vision-msgs \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    ros-$ROS_DISTRO-nav2-bringup \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* \
+    && echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
 
 ## Symlink clang version to non-versioned clang and set cc to clang
 RUN update-alternatives --install /usr/bin/cc cc /usr/bin/clang 100 \
     && update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++ 100
+
+# O3DE 2310.1
+ENV O3DE_HASH=c89678d6ba58271c76650e7aec180a3196f24f02
+
+# ROS2GEM 2310.1
+ENV O3DE_EXTRAS_HASH=f21f48125a24517bd6c29fd95ee97a85d546f675
+ENV PROJECT_NAME=eail
+
+ENV WORKDIR=/data/workspace
+WORKDIR $WORKDIR
 
 # Install o3de
 RUN git clone https://github.com/o3de/o3de.git \
@@ -128,42 +154,8 @@ RUN . /opt/ros/$ROS_DISTRO/setup.sh \
     && echo "This final step can take more than 1 hour. Good time for going for a coffee :)" \
     && cmake --build build/linux --config profile --target ${PROJECT_NAME}.Assets -j 15
 
-# Installing some ros2 for navigation
-RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install --no-install-recommends -y \
-    python3-colcon-common-extensions \
-    ros-$ROS_DISTRO-cyclonedds \
-    ros-$ROS_DISTRO-rmw-cyclonedds-cpp \
-    ros-$ROS_DISTRO-slam-toolbox \
-    ros-$ROS_DISTRO-navigation2 \
-    ros-$ROS_DISTRO-nav2-bringup \
-    ros-$ROS_DISTRO-pointcloud-to-laserscan \
-    ros-$ROS_DISTRO-teleop-twist-keyboard \
-    ros-$ROS_DISTRO-ackermann-msgs \
-    ros-$ROS_DISTRO-topic-tools \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
 RUN pip install --no-cache-dir python-statemachine 
 
-WORKDIR $WORKDIR
-
-ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-
-# Installing ubuntu-desktop x11vnc novnc
-RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install --no-install-recommends -y \
-    openssh-server \
-    supervisor \
-    xfce4 xfce4-goodies \
-    x11vnc xvfb \
-    novnc \
-    dbus-x11 \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /root
-
-ADD startup.sh ./
-ADD supervisord.conf ./
-
-EXPOSE 5900
-EXPOSE 22
 
 ENTRYPOINT ["./startup.sh"]
