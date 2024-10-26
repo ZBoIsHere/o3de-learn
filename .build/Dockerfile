@@ -156,6 +156,16 @@ RUN . /opt/ros/$ROS_DISTRO/setup.sh \
 
 RUN pip install --no-cache-dir python-statemachine 
 
+# add 3dgs gem
+
+# add 3dgs depends cuda
+WORKDIR /root/.o3de/3rdParty/packages/
+RUN mkdir -p cuda-11.4-rev1-windows/cuda/lib/x64/ \
+    && ln -s /usr/local/cuda/include cuda-11.4-rev1-windows/cuda/include \
+    && ln -s /usr/local/cuda/lib64/libcudart_static.a cuda-11.4-rev1-windows/cuda/lib/x64/libcudart_static.a
+
+ADD cuda/* ./cuda-11.4-rev1-windows/
+
 WORKDIR /root
 
 ENTRYPOINT ["./startup.sh"]

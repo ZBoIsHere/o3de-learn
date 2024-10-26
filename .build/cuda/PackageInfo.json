@@ -1,0 +1,6 @@
+{
+	"PackageName" : "cuda-11.4-rev1-windows",
+	"URL" : "",
+	"License" : "MIT",
+	"LicenseFile" : "cuda/README"
+}
