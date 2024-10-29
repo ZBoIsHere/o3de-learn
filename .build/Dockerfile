@@ -17,55 +17,20 @@ RUN sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
 ENV LANG=en_US.UTF-8
 
 # Install common tools and ubuntu graphic desktop and vnc+novnc
-# deps in https://github.com/o3de/o3de/blob/development/scripts/build/build_node/Platform/Linux/package-list.ubuntu-jammy.txt
 RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install --no-install-recommends -y \
-    bc \
-    bind9-utils \
-    binutils \
+    # common depends
     ca-certificates \
-    clang \
-    cmake \
     curl \
+    sudo \
+    software-properties-common \
+    python3-pip \
+    # graphics desktop depends
     dbus-x11 \
-    file \
-    firewalld \
-    git \
-    git-lfs \
-    jq \
-    kbd \
-    kmod \
-    less \
-    lsb-release \
-    libglu1-mesa-dev \
-    libxcb-xinerama0 \
-    libfontconfig1-dev \
-    libcurl4-openssl-dev \
-    libnvidia-gl-470 \
-    libssl-dev \
-    libxcb-xkb-dev \
-    libxkbcommon-x11-dev \
-    libxkbcommon-dev \
-    libxcb-xfixes0-dev \
-    libxcb-xinput-dev \
-    libxcb-xinput0 \
-    libpcre2-16-0 \
-    lsof \
-    net-tools \
-    ninja-build \
     novnc \
     openssh-server \
-    pciutils \
-    python3-pip \
-    software-properties-common \
-    sudo \
     supervisor \
-    tar \
-    unzip \
-    vim \
-    wget \
     x11vnc xvfb \
     xfce4 xfce4-goodies \
-    xz-utils \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /root
@@ -81,7 +46,6 @@ RUN add-apt-repository universe \
     && curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] \
     http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
-
 
 ARG ROS_DISTRO=humble
 # Gem + ROS pacakges
@@ -100,6 +64,32 @@ RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install --no-inst
     ros-$ROS_DISTRO-nav2-bringup \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
+
+# Install o3de depends
+RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install --no-install-recommends -y \
+    # o3de depends
+    clang \
+    cmake \
+    git \
+    git-lfs \
+    libfontconfig1-dev \ 
+    libglu1-mesa-dev \ 
+    libpcre2-16-0 \ 
+    libstdc++-12-dev \
+    libunwind-dev \ 
+    libxcb-xinerama0 \ 
+    libxcb-xinput0 \ 
+    libxcb-xinput-dev \ 
+    libxcb-xfixes0-dev \ 
+    libxcb-xkb-dev \ 
+    libxkbcommon-dev \ 
+    libxkbcommon-x11-dev \ 
+    libzstd-dev \ 
+    mesa-common-dev \ 
+    ninja-build \
+    tix \
+    zlib1g-dev \ 
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 ## Symlink clang version to non-versioned clang and set cc to clang
 RUN update-alternatives --install /usr/bin/cc cc /usr/bin/clang 100 \
@@ -132,9 +122,7 @@ RUN git clone https://github.com/o3de/o3de-extras.git \
 
 # regiester engine and Gems from o3de-extras
 RUN ./o3de/scripts/o3de.sh register --this-engine \
-    && ./o3de/scripts/o3de.sh register --gem-path ./o3de-extras/Gems/ROS2 \
-    && ./o3de/scripts/o3de.sh register --gem-path ./o3de-extras/Gems/RosRobotSample \
-    && ./o3de/scripts/o3de.sh register --gem-path ./o3de-extras/Gems/WarehouseSample 
+    && ./o3de/scripts/o3de.sh register --all-gems-path ./o3de-extras/Gems
 
 # create in project from template in o3de-extras
 RUN ./o3de/scripts/o3de.sh create-project \
@@ -144,19 +132,12 @@ RUN ./o3de/scripts/o3de.sh create-project \
 WORKDIR ${WORKDIR}/${PROJECT_NAME}
 
 RUN . /opt/ros/$ROS_DISTRO/setup.sh \
-    && cmake -B build/linux -S . -G "Ninja Multi-Config" -DLY_STRIP_DEBUG_SYMBOLS=ON
+    && cmake -B build/linux -S . -G "Ninja Multi-Config" -DLY_DISABLE_TEST_MODULES=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DLY_STRIP_DEBUG_SYMBOLS=ON
 
+ADD cleanup.sh ../
 RUN . /opt/ros/$ROS_DISTRO/setup.sh \
-    && cmake --build build/linux --config profile --target ${PROJECT_NAME} Editor AssetProcessor -j 15
-
-# This final step takes long since they Assets will be downloading
-RUN . /opt/ros/$ROS_DISTRO/setup.sh \
-    && echo "This final step can take more than 1 hour. Good time for going for a coffee :)" \
-    && cmake --build build/linux --config profile --target ${PROJECT_NAME}.Assets -j 15
-
-RUN pip install --no-cache-dir python-statemachine 
-
-# add 3dgs gem
+    && cmake --build build/linux --config profile --target ${PROJECT_NAME} Editor ${PROJECT_NAME}.Assets  -j 15 \
+    && cd ../ && ./cleanup.sh
 
 # add 3dgs depends cuda
 WORKDIR /root/.o3de/3rdParty/packages/
