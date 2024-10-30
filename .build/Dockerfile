@@ -134,19 +134,6 @@ WORKDIR ${WORKDIR}/${PROJECT_NAME}
 RUN . /opt/ros/$ROS_DISTRO/setup.sh \
     && cmake -B build/linux -S . -G "Ninja Multi-Config" -DLY_DISABLE_TEST_MODULES=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DLY_STRIP_DEBUG_SYMBOLS=ON
 
-ADD cleanup.sh ../
-RUN . /opt/ros/$ROS_DISTRO/setup.sh \
-    && cmake --build build/linux --config profile --target ${PROJECT_NAME} Editor ${PROJECT_NAME}.Assets  -j 15 \
-    && cd ../ && ./cleanup.sh
-
-# add 3dgs depends cuda
-WORKDIR /root/.o3de/3rdParty/packages/
-RUN mkdir -p cuda-11.4-rev1-windows/cuda/lib/x64/ \
-    && ln -s /usr/local/cuda/include cuda-11.4-rev1-windows/cuda/include \
-    && ln -s /usr/local/cuda/lib64/libcudart_static.a cuda-11.4-rev1-windows/cuda/lib/x64/libcudart_static.a
-
-ADD cuda/* ./cuda-11.4-rev1-windows/
-
 WORKDIR /root
 
 ENTRYPOINT ["./startup.sh"]
